@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dlg_flower_cifar"
+version = "1.0.0"
+description = "Deep Leakage from Gradients utilizando Flower Framework e CIFAR-100"
+license = "MIT"
+dependencies = [
+    "flwr[simulation]>=1.25.0,<1.26.0",
+    "flwr-datasets[vision]>=0.5.0",
+    "torch>=2.2.0",
+    "torchvision>=0.17.0",
+    "matplotlib>=3.8.0",
+    "numpy>=1.26.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+[tool.flwr.app]
+publisher = "raphael-ortolan"
+
+[tool.flwr.app.components]
+serverapp = "dlg_flower.server_app:app"
+clientapp = "dlg_flower.client_app:app"
+
+[tool.flwr.app.config]
+num-server-rounds = 1
+dlg-iterations = 300
+target-index = 25
+
+[tool.flwr.federations]
+default = "local-simulation"
+
+[tool.flwr.federations.local-simulation]
+options.num-supernodes = 2
