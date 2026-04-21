@@ -4,6 +4,7 @@ from collections import OrderedDict
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 import numpy as np
 import torch
 import torch.nn as nn
@@ -11,6 +12,9 @@ import torch.nn.functional as F
 from torch.autograd import grad
 from torchvision import datasets, transforms
 
+FONT_SIZE = 26
+
+plt.rcParams.update({'font.size': FONT_SIZE})
 
 # Transforms
 tp = transforms.Compose([
@@ -70,6 +74,7 @@ def dlg_attack_from_gradients(
     net, original_dy_dx,
     input_shape=(1, 3, 32, 32), num_classes=100,
     num_iterations=300, save_dir="dlg_results", client_id=None,
+    gt_image=None,
 ):
     tag = f"client_{client_id}" if client_id is not None else "victim"
     save_dir = os.path.join(save_dir, tag)
@@ -108,14 +113,13 @@ def dlg_attack_from_gradients(
         current_loss = closure()
         losses.append(current_loss.item())
         if iters % 10 == 0:
-            print(f"  {tag} | iter {iters:>3d} | loss {current_loss.item():.4f}")
+            print(f"  {tag} | iter {iters:>3d} | perda {current_loss.item():.4f}")
         history.append(tt(dummy_data[0].cpu()))
 
     recovered_label = torch.argmax(dummy_label, dim=-1).item()
     print(f"  {tag} | Label recuperada: {recovered_label}")
 
-    _save_results(history, losses, initial_noise, None, save_dir,
-                  f"Reconstrução DLG — {tag}")
+    _save_results(history, losses, initial_noise, gt_image, save_dir,f"")
     print(f"  Resultados salvos em: {os.path.abspath(save_dir)}/")
     return dummy_data.detach(), dummy_label.detach()
 
@@ -126,9 +130,10 @@ def _save_results(history, losses, initial_noise, gt_image, save_dir, title):
     os.makedirs(save_dir, exist_ok=True)
     initial_noise.save(os.path.join(save_dir, "iter_0000_noise.png"))
     for i, img in enumerate(history):
-        img.save(os.path.join(save_dir, f"iter_{i+1:04d}.png"))
+        if (i+1) % 10 == 0:
+            img.save(os.path.join(save_dir, f"iter_{i+1:04d}.png"))
 
-    # 3×10 grid
+    # Grid 3×10
     fig = plt.figure(figsize=(12, 8))
     for i in range(min(30, len(history) // 10)):
         plt.subplot(3, 10, i + 1)
@@ -138,7 +143,6 @@ def _save_results(history, losses, initial_noise, gt_image, save_dir, title):
     fig.savefig(os.path.join(save_dir, "grid_30.png"), bbox_inches="tight", dpi=150)
     plt.close(fig)
 
-    # Progressão (4 colunas)
     milestones = [m for m in [0, 1, 10, 20, 50, 100, 150, 200, 250] if m < len(history)]
     if history:
         milestones.append(len(history) - 1)
@@ -151,29 +155,33 @@ def _save_results(history, losses, initial_noise, gt_image, save_dir, title):
     for idx in milestones:
         all_imgs.append(history[idx])
         all_titles.append("Iter=%d" % (idx + 1))
-    n = len(all_imgs); cols = 4; rows = (n + cols - 1) // cols
-    fig2, axes = plt.subplots(rows, cols, figsize=(cols * 2.5, rows * 2.8))
-    axes = axes.flatten()
-    for i in range(len(axes)):
-        if i < n:
-            axes[i].imshow(all_imgs[i])
-            axes[i].set_title(all_titles[i], fontsize=9)
-        axes[i].axis("off")
-    fig2.suptitle(title, fontsize=13, y=1.01)
-    fig2.tight_layout()
-    fig2.savefig(os.path.join(save_dir, "progression.png"), bbox_inches="tight", dpi=150)
-    plt.close(fig2)
 
-    # Perda
-    fig3, ax = plt.subplots(figsize=(6, 3))
-    ax.plot(range(1, len(losses) + 1), losses)
-    ax.set_xlabel("Iteração")
-    ax.set_ylabel("Perda")
-    ax.set_title("Convergência DLG")
+    fig = plt.figure(figsize=(16, 8), constrained_layout=True)
+    gs = gridspec.GridSpec(3, 1, height_ratios=[1, 1, 1.2], figure=fig)
+
+    gs_row1 = gs[0].subgridspec(1, 6)
+    for i in range(6):
+        ax1 = fig.add_subplot(gs_row1[0, i])
+        ax1.imshow(all_imgs[i])
+        ax1.set_title(all_titles[i])
+        ax1.axis("off")
+
+    gs_row2 = gs[1].subgridspec(1, 6)
+    for i in range(6):
+        ax1 = fig.add_subplot(gs_row2[0, i])
+        ax1.imshow(all_imgs[i + 6])
+        ax1.set_title(all_titles[i + 6])
+        ax1.axis("off")
+
+    ax_graph = fig.add_subplot(gs[2])
+
+    ax_graph.set_xlabel("Iteração")
+    ax_graph.set_ylabel("Perda")
     if any(l > 0 for l in losses):
-        ax.set_yscale("log")
-    fig3.tight_layout()
-    fig3.savefig(os.path.join(save_dir, "loss_curve.png"), bbox_inches="tight", dpi=150)
-    plt.close(fig3)
+        ax_graph.set_yscale("log")
+    ax_graph.plot(range(1, len(losses) + 1), losses)
+
+    fig.savefig(os.path.join(save_dir, "resultado-final.pdf"), format="pdf", bbox_inches="tight", dpi=150)
+
     if gt_image:
         gt_image.save(os.path.join(save_dir, "ground_truth.png"))

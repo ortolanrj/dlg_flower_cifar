@@ -29,7 +29,6 @@ clientapp = "dlg_flower.client_app:app"
 [tool.flwr.app.config]
 num-server-rounds = 1
 dlg-iterations = 300
-target-index = 25
 
 [tool.flwr.federations]
 default = "local-simulation"

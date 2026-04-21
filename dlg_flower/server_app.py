@@ -19,15 +19,10 @@ from flwr.app import ArrayRecord, ConfigRecord, Context, Message, MetricRecord
 from flwr.serverapp import Grid, ServerApp
 from flwr.serverapp.strategy import FedAvg
 
-from dlg_flower.task import LeNet, dlg_attack_from_gradients, weights_init
+from dlg_flower.task import LeNet, dlg_attack_from_gradients, load_cifar100, tp, tt, weights_init
 
 
 class MaliciousFedAvg(FedAvg):
-    """FedAvg com um servidor malicioso que executa o ataque DLG em um cliente aleatório.
-
-    O servidor é 'honesto-mas-curioso'.
-    """
-
     def __init__(self, dlg_iterations: int = 300, **kwargs):
         super().__init__(**kwargs)
         self.dlg_iterations = dlg_iterations
@@ -89,7 +84,12 @@ class MaliciousFedAvg(FedAvg):
             )
             net.eval()
 
-            # ---- Ataque DLG ---- 
+            # ---- Ataque DLG ----
+            # Carrega imagem verdadeira para comparação
+            victim_img_index = int(victim_metrics["img_index"]) if victim_metrics else 0
+            dst = load_cifar100()
+            gt_image = tt(tp(dst[victim_img_index][0]))
+
             dlg_attack_from_gradients(
                 net=net,
                 original_dy_dx=recovered_gradients,
@@ -98,6 +98,7 @@ class MaliciousFedAvg(FedAvg):
                 num_iterations=self.dlg_iterations,
                 save_dir="dlg_results",
                 client_id=victim_partition,
+                gt_image=gt_image,
             )
 
         # ---- Passo 5: Agregação FedAvg ----
